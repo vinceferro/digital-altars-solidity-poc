@@ -80,10 +80,21 @@ contract Altars {
         emit AltarDestroyed(altarId, msg.sender);
     }
 
-    function altarsByOwner(
+    function altarsIdsByOwner(
         address owner
     ) public view returns (uint256[] memory) {
         return _altarsByOwner[owner];
+    }
+
+    function altarsByOwner(address owner) public view returns (Altar[] memory) {
+        uint256[] memory ids = _altarsByOwner[owner];
+        Altar[] memory altars = new Altar[](ids.length);
+
+        for (uint256 i = 0; i < ids.length; i++) {
+            altars[i] = _altars[ids[i]];
+        }
+
+        return altars;
     }
 
     function _checkOwnership(uint256 altarId) internal view {
