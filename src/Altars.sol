@@ -13,19 +13,20 @@ contract Altars {
         string name;
         string altarStyleURI;
         string pictureURI;
-        OfferingType currentOffering;
+        address owner;
+        OfferingType offering;
     }
 
-    mapping(uint256 => address) private _owners;
     mapping(uint256 => Altar) private _altars;
+    mapping(address => uint256[]) private _altarsByOwner;
 
     event AltarCreated(uint256 altarId, address indexed owner);
     event AltarDestroyed(uint256 altarId, address indexed owner);
     event OfferingUpdated(uint256 indexed altarId, OfferingType newOffering);
 
-    error InvalidOwner(address owner);
-    error NonexistentAltar(uint256 altarId);
     error IncorrectOwner(address sender, uint256 altarId, address owner);
+    error InvalidAltarId(uint256 altarId);
+    error NonexistentAltar(uint256 altarId);
 
     constructor() {}
 
@@ -35,46 +36,65 @@ contract Altars {
         string memory altarStyleURI,
         string memory pictureURI
     ) public {
-        _requireAvailable(altarId);
+        if (_exists(altarId)) {
+            revert InvalidAltarId(altarId);
+        }
 
         Altar memory newAltar = Altar({
             name: name,
             altarStyleURI: altarStyleURI,
             pictureURI: pictureURI,
-            currentOffering: OfferingType.None
+            owner: msg.sender,
+            offering: OfferingType.None
         });
 
         _altars[altarId] = newAltar;
-        _owners[altarId] = msg.sender;
+        _altarsByOwner[msg.sender].push(altarId);
 
         emit AltarCreated(altarId, msg.sender);
     }
 
     function updateOffering(uint256 altarId, OfferingType newOffering) public {
-        require(_exists(altarId), "Token ID does not exist");
+        _checkOwnership(altarId);
 
         Altar storage altar = _altars[altarId];
-        altar.currentOffering = newOffering;
+        altar.offering = newOffering;
 
         emit OfferingUpdated(altarId, newOffering);
     }
 
-    function ownerOf(uint256 altarId) public view virtual returns (address) {
-        return _requireOwned(altarId);
+    function destroyAltar(uint256 altarId) public {
+        _checkOwnership(altarId);
+
+        delete _altars[altarId];
+
+        uint256[] storage ids = _altarsByOwner[msg.sender];
+        for (uint256 i = 0; i < ids.length; i++) {
+            if (ids[i] == altarId) {
+                ids[i] = ids[ids.length - 1];
+                ids.pop();
+                break;
+            }
+        }
+
+        emit AltarDestroyed(altarId, msg.sender);
     }
 
-    function _requireAvailable(uint256 altarId) internal view {
-        if (!_exists(altarId)) {
-            revert NonexistentAltar(altarId);
-        }
+    function altarsByOwner(
+        address owner
+    ) public view returns (uint256[] memory) {
+        return _altarsByOwner[owner];
     }
 
-    function _requireOwned(uint256 altarId) internal view returns (address) {
-        address owner = _ownerOf(altarId);
-        if (owner == address(0)) {
+    function _checkOwnership(uint256 altarId) internal view {
+        address altarOwnedBy = _ownerOf(altarId);
+        if (altarOwnedBy == address(0)) {
             revert NonexistentAltar(altarId);
         }
-        return owner;
+
+        if (altarOwnedBy != msg.sender) {
+            revert IncorrectOwner(msg.sender, altarId, altarOwnedBy);
+        }
     }
 
     function _exists(uint256 altarId) internal view returns (bool) {
@@ -82,6 +102,6 @@ contract Altars {
     }
 
     function _ownerOf(uint256 altarId) internal view virtual returns (address) {
-        return _owners[altarId];
+        return _altars[altarId].owner;
     }
 }
